@@ -1,6 +1,8 @@
 import logging
 import shlex
+import subprocess
 
+from dask.utils import parse_bytes, format_bytes
 import dask
 
 from .core import JobQueueCluster, Job, job_parameters, cluster_parameters
@@ -24,6 +26,7 @@ class OARJob(Job):
         project=None,
         resource_spec=None,
         walltime=None,
+        job_extra=None,
         config_name=None,
         **base_class_kwargs
     ):
@@ -41,6 +44,8 @@ class OARJob(Job):
             )
         if walltime is None:
             walltime = dask.config.get("jobqueue.%s.walltime" % self.config_name)
+        if job_extra is None:
+            job_extra = dask.config.get("jobqueue.%s.job-extra" % self.config_name)
 
         header_lines = []
         if self.job_name is not None:
@@ -49,6 +54,24 @@ class OARJob(Job):
             header_lines.append("#OAR -q %s" % queue)
         if project is not None:
             header_lines.append("#OAR --project %s" % project)
+
+        # Memory
+        memory = self.worker_memory
+        if memory is not None:
+            oarnodes_output = subprocess.check_output("oarnodes")
+            # OAR expects MiB as memory unit
+            oar_memory = (
+                float(
+                    format_bytes(parse_bytes(self.worker_memory / self.worker_cores))
+                    .replace("GiB", "")
+                    .replace(" ", "")
+                )
+                * 1024
+            )
+            if "memcore" in str(oarnodes_output):
+                header_lines.append("#OAR -p memcore>=%s" % oar_memory)
+            elif "mem_core" in str(oarnodes_output):
+                header_lines.append("#OAR -p mem_core>=%s" % oar_memory)
 
         # OAR needs to have the resource on a single line otherwise it is
         # considered as a "moldable job" (i.e. the scheduler can chose between
@@ -64,17 +87,7 @@ class OARJob(Job):
 
         full_resource_spec = ",".join(resource_spec_list)
         header_lines.append("#OAR -l %s" % full_resource_spec)
-
-        # Skip requested header directives
-        header_lines = list(
-            filter(
-                lambda line: not any(skip in line for skip in self.job_directives_skip),
-                header_lines,
-            )
-        )
-
-        # Add extra header directives
-        header_lines.extend(["#OAR %s" % arg for arg in self.job_extra_directives])
+        header_lines.extend(["#OAR %s" % arg for arg in job_extra])
 
         self.job_header = "\n".join(header_lines)
 
@@ -112,7 +125,7 @@ class OARCluster(JobQueueCluster):
     queue : str
         Destination queue for each worker job. Passed to `#OAR -q` option.
     project : str
-        Project associated with each worker job. Passed to `#OAR --project` option.
+        Accounting string associated with each worker job. Passed to `#OAR -p` option.
     {job}
     {cluster}
     resource_spec : str
@@ -120,8 +133,6 @@ class OARCluster(JobQueueCluster):
     walltime : str
         Walltime for each worker job.
     job_extra : list
-        Deprecated: use ``job_extra_directives`` instead. This parameter will be removed in a future version.
-    job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
 
     Examples

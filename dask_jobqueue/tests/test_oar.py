@@ -1,4 +1,5 @@
 import sys
+import subprocess
 
 import dask
 from dask.utils import format_bytes, parse_bytes
@@ -12,6 +13,19 @@ def test_header():
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
+        oar_formatted_bytes = (
+            float(
+                format_bytes(parse_bytes("3.5GB")).replace("GiB", "").replace(" ", "")
+            )
+            * 1024
+        )
+        oarnodes_output = subprocess.check_output("oarnodes")
+        if "memcore" in str(oarnodes_output):
+            assert f"#OAR -p memcore>={oar_formatted_bytes}" in cluster.job_header
+        elif "mem_core" in str(oarnodes_output):
+            assert f"#OAR -p mem_core>={oar_formatted_bytes}" in cluster.job_header
+        else:
+            assert "#OAR -p mem" not in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
 
@@ -21,16 +35,28 @@ def test_header():
         processes=4,
         cores=8,
         memory="28GB",
-        job_extra_directives=["-t besteffort"],
+        job_extra=["-t besteffort"],
     ) as cluster:
         assert "walltime=" in cluster.job_header
         assert "#OAR --project DaskOnOar" in cluster.job_header
         assert "#OAR -q regular" in cluster.job_header
         assert "#OAR -t besteffort" in cluster.job_header
+        oar_formatted_bytes = (
+            float(
+                format_bytes(parse_bytes("3.5GB")).replace("GiB", "").replace(" ", "")
+            )
+            * 1024
+        )
+        assert f"#OAR -p memcore>={oar_formatted_bytes}" in cluster.job_header
 
     with OARCluster(cores=4, memory="8GB") as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "walltime=" in cluster.job_header
+        oar_formatted_bytes = (
+            float(format_bytes(parse_bytes("2GB")).replace("GiB", "").replace(" ", ""))
+            * 1024
+        )
+        assert f"#OAR -p memcore>={oar_formatted_bytes}" in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
 
@@ -45,6 +71,13 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
+        oar_formatted_bytes = (
+            float(
+                format_bytes(parse_bytes("3.5GB")).replace("GiB", "").replace(" ", "")
+            )
+            * 1024
+        )
+        assert f"#OAR -p memcore>={oar_formatted_bytes}" in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
 
@@ -64,7 +97,7 @@ def test_job_script():
         processes=4,
         cores=8,
         memory="28GB",
-        job_script_prologue=[
+        env_extra=[
             'export LANG="en_US.utf8"',
             'export LANGUAGE="en_US.utf8"',
             'export LC_ALL="en_US.utf8"',
@@ -76,6 +109,13 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
+        oar_formatted_bytes = (
+            float(
+                format_bytes(parse_bytes("3.5GB")).replace("GiB", "").replace(" ", "")
+            )
+            * 1024
+        )
+        assert f"#OAR -p memcore>={oar_formatted_bytes}" in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
 
@@ -101,18 +141,15 @@ def test_config_name_oar_takes_custom_config():
         "cores": 1,
         "memory": "2 GB",
         "walltime": "00:02",
-        "job-extra": None,
-        "job-extra-directives": [],
+        "job-extra": [],
         "name": "myname",
         "processes": 1,
         "interface": None,
         "death-timeout": None,
         "local-directory": "/foo",
         "shared-temp-directory": None,
-        "extra": None,
-        "worker-extra-args": [],
-        "env-extra": None,
-        "job-script-prologue": [],
+        "extra": [],
+        "env-extra": [],
         "log-directory": None,
         "shebang": "#!/usr/bin/env bash",
         "job-cpu": None,
