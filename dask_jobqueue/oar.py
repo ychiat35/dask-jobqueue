@@ -2,7 +2,7 @@ import logging
 import shlex
 import subprocess
 
-from dask.utils import parse_bytes, format_bytes
+from dask.utils import parse_bytes
 import dask
 
 from .core import JobQueueCluster, Job, job_parameters, cluster_parameters
@@ -28,7 +28,7 @@ class OARJob(Job):
         walltime=None,
         job_extra=None,
         config_name=None,
-        **base_class_kwargs
+        **base_class_kwargs,
     ):
         super().__init__(
             scheduler=scheduler, name=name, config_name=config_name, **base_class_kwargs
@@ -59,14 +59,12 @@ class OARJob(Job):
         memory = self.worker_memory
         if memory is not None:
             oarnodes_output = subprocess.check_output("oarnodes")
-            # OAR expects MiB as memory unit
-            oar_memory = (
+            oar_memory = int(
                 float(
-                    format_bytes(parse_bytes(self.worker_memory / self.worker_cores))
-                    .replace("GiB", "")
-                    .replace(" ", "")
+                    format_bytes_oar(
+                        parse_bytes(self.worker_memory / self.worker_cores)
+                    )
                 )
-                * 1024
             )
             if "memcore" in str(oarnodes_output):
                 header_lines.append("#OAR -p memcore>=%s" % oar_memory)
@@ -115,6 +113,22 @@ class OARJob(Job):
         oarsub_command = " ".join([self.submit_command] + oarsub_options)
         oarsub_command_split = shlex.split(oarsub_command) + [inline_script]
         return self._call(oarsub_command_split)
+
+
+def format_bytes_oar(n: int) -> float:
+    """Format bytes as Dask: for all values < 2**60, the output is always <= 10 characters.
+    OAR expects MiB as memory unit.
+    """
+    for prefix, k in (
+        ("Pi", 2**50),
+        ("Ti", 2**40),
+        ("Gi", 2**30),
+        ("Mi", 2**20),
+        ("ki", 2**10),
+    ):
+        if n >= k * 0.9:
+            return f"{(n * (k / 2**20))/ k:.2f}"
+    return f"{n / 2**20}"
 
 
 class OARCluster(JobQueueCluster):
