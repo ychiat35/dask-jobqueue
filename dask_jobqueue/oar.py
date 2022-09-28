@@ -2,7 +2,9 @@ import logging
 import shlex
 import subprocess
 
+from more_itertools import intersperse
 from dask.utils import parse_bytes
+
 import dask
 
 from .core import JobQueueCluster, Job, job_parameters, cluster_parameters
@@ -96,6 +98,20 @@ class OARJob(Job):
 
         # Add extra header directives
         header_lines.extend(["#OAR %s" % arg for arg in self.job_extra_directives])
+
+        # OAR needs to have the properties on a single line, with SQL syntaxe
+        oar_properties = [
+            header.replace("#OAR -p ", "")
+            for header in header_lines
+            if header.startswith("#OAR -p")
+        ]
+        oar_properties = list(intersperse(" AND ", oar_properties))
+        header_lines = [
+            header for header in header_lines if not header.startswith("#OAR -p")
+        ]
+        header_lines.append(
+            "#OAR -p %s" % '"' + ("".join("".join(i) for i in [oar_properties])) + '"'
+        )
 
         self.job_header = "\n".join(header_lines)
 
