@@ -28,9 +28,8 @@ class OARJob(Job):
         project=None,
         resource_spec=None,
         walltime=None,
-        job_extra=None,
         config_name=None,
-        **base_class_kwargs,
+        **base_class_kwargs
     ):
         super().__init__(
             scheduler=scheduler, name=name, config_name=config_name, **base_class_kwargs
@@ -46,8 +45,6 @@ class OARJob(Job):
             )
         if walltime is None:
             walltime = dask.config.get("jobqueue.%s.walltime" % self.config_name)
-        if job_extra is None:
-            job_extra = dask.config.get("jobqueue.%s.job-extra" % self.config_name)
 
         header_lines = []
         if self.job_name is not None:
@@ -61,12 +58,9 @@ class OARJob(Job):
         memory = self.worker_memory
         if memory is not None:
             oarnodes_output = subprocess.check_output("oarnodes")
+            # OAR expects MiB as memory unit
             oar_memory = int(
-                float(
-                    format_bytes_oar(
-                        parse_bytes(self.worker_memory / self.worker_cores)
-                    )
-                )
+                float(parse_bytes(self.worker_memory / self.worker_cores) / 2**20)
             )
             if "memcore" in str(oarnodes_output):
                 header_lines.append("#OAR -p memcore>=%s" % oar_memory)
@@ -141,22 +135,6 @@ class OARJob(Job):
         return self._call(oarsub_command_split)
 
 
-def format_bytes_oar(n: int) -> float:
-    """Format bytes as Dask: for all values < 2**60, the output is always <= 10 characters.
-    OAR expects MiB as memory unit.
-    """
-    for prefix, k in (
-        ("Pi", 2**50),
-        ("Ti", 2**40),
-        ("Gi", 2**30),
-        ("Mi", 2**20),
-        ("ki", 2**10),
-    ):
-        if n >= k * 0.9:
-            return f"{(n * (k / 2**20))/ k:.2f}"
-    return f"{n / 2**20}"
-
-
 class OARCluster(JobQueueCluster):
     __doc__ = """ Launch Dask on an OAR cluster
 
@@ -165,7 +143,7 @@ class OARCluster(JobQueueCluster):
     queue : str
         Destination queue for each worker job. Passed to `#OAR -q` option.
     project : str
-        Project associated with each worker job. Passed to `#OAR -p` option.
+        Project associated with each worker job. Passed to `#OAR --project` option.
     {job}
     {cluster}
     resource_spec : str
@@ -173,6 +151,8 @@ class OARCluster(JobQueueCluster):
     walltime : str
         Walltime for each worker job.
     job_extra : list
+        Deprecated: use ``job_extra_directives`` instead. This parameter will be removed in a future version.
+    job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
 
     Examples
