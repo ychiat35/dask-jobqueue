@@ -13,12 +13,11 @@ def test_header():
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
-        oar_formatted_bytes = int(float(format_bytes_oar(parse_bytes("3.5GB"))))
         oarnodes_output = subprocess.check_output("oarnodes")
         if "memcore" in str(oarnodes_output):
-            assert f"#OAR -p memcore>={oar_formatted_bytes}" in cluster.job_header
+            assert '#OAR -p "memcore>=3337"' in cluster.job_header
         elif "mem_core" in str(oarnodes_output):
-            assert f"#OAR -p mem_core>={oar_formatted_bytes}" in cluster.job_header
+            assert '#OAR -p "mem_core>=3337"' in cluster.job_header
         else:
             assert "#OAR -p mem" not in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
@@ -36,14 +35,12 @@ def test_header():
         assert "#OAR --project DaskOnOar" in cluster.job_header
         assert "#OAR -q regular" in cluster.job_header
         assert "#OAR -t besteffort" in cluster.job_header
-        oar_formatted_bytes = int(float(format_bytes_oar(parse_bytes("3.5GB"))))
-        assert f"#OAR -p memcore>={oar_formatted_bytes}" in cluster.job_header
+        assert '#OAR -p "memcore>=3337"' in cluster.job_header
 
     with OARCluster(cores=4, memory="8GB") as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "walltime=" in cluster.job_header
-        oar_formatted_bytes = int(float(format_bytes_oar(parse_bytes("2GB"))))
-        assert f"#OAR -p memcore>={oar_formatted_bytes}" in cluster.job_header
+        assert '#OAR -p "memcore>=1907"' in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
 
@@ -58,8 +55,7 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
-        oar_formatted_bytes = int(float(format_bytes_oar(parse_bytes("3.5GB"))))
-        assert f"#OAR -p memcore>={oar_formatted_bytes}" in job_script
+        assert '#OAR -p "memcore>=3337"' in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
 
@@ -79,7 +75,7 @@ def test_job_script():
         processes=4,
         cores=8,
         memory="28GB",
-        env_extra=[
+        job_script_prologue=[
             'export LANG="en_US.utf8"',
             'export LANGUAGE="en_US.utf8"',
             'export LC_ALL="en_US.utf8"',
@@ -91,8 +87,7 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
-        oar_formatted_bytes = int(float(format_bytes_oar(parse_bytes("3.5GB"))))
-        assert f"#OAR -p memcore>={oar_formatted_bytes}" in job_script
+        assert '#OAR -p "memcore>=3337"' in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
 
@@ -126,9 +121,9 @@ def test_config_name_oar_takes_custom_config():
         "death-timeout": None,
         "local-directory": "/foo",
         "shared-temp-directory": None,
-        "extra": [],
+        "extra": None,
         "worker-extra-args": [],
-        "env-extra": [],
+        "env-extra": None,
         "job-script-prologue": [],
         "log-directory": None,
         "shebang": "#!/usr/bin/env bash",
@@ -140,19 +135,3 @@ def test_config_name_oar_takes_custom_config():
     with dask.config.set({"jobqueue.oar-config-name": conf}):
         with OARCluster(config_name="oar-config-name") as cluster:
             assert cluster.job_name == "myname"
-
-
-def format_bytes_oar(n: int) -> float:
-    """Format bytes as Dask: for all values < 2**60, the output is always <= 10 characters.
-    OAR expects MiB as memory unit.
-    """
-    for prefix, k in (
-        ("Pi", 2**50),
-        ("Ti", 2**40),
-        ("Gi", 2**30),
-        ("Mi", 2**20),
-        ("ki", 2**10),
-    ):
-        if n >= k * 0.9:
-            return f"{(n * (k / 2**20))/ k:.2f}"
-    return f"{n / 2**20}"
