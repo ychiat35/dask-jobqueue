@@ -44,6 +44,15 @@ def test_header():
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
 
+    with OARCluster(
+        cores=4,
+        memory="8GB",
+        job_extra_directives=["-p gpu_count=1"],
+    ) as cluster:
+        assert "#OAR -n dask-worker" in cluster.job_header
+        assert "walltime=" in cluster.job_header
+        assert '#OAR -p "memcore>=1907 AND gpu_count=1"' in cluster.job_header
+
 
 def test_job_script():
     with OARCluster(
