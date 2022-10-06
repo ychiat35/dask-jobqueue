@@ -1,5 +1,4 @@
 import sys
-import subprocess
 
 import dask
 from dask.utils import format_bytes, parse_bytes
@@ -13,15 +12,9 @@ def test_header():
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
-        oarnodes_output = subprocess.check_output("oarnodes")
-        if "memcore" in str(oarnodes_output):
-            assert '#OAR -p "memcore>=3337"' in cluster.job_header
-        elif "mem_core" in str(oarnodes_output):
-            assert '#OAR -p "mem_core>=3337"' in cluster.job_header
-        else:
-            assert "#OAR -p mem" not in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
+        assert "#OAR -p mem" not in cluster.job_header
 
     with OARCluster(
         queue="regular",
@@ -35,23 +28,33 @@ def test_header():
         assert "#OAR --project DaskOnOar" in cluster.job_header
         assert "#OAR -q regular" in cluster.job_header
         assert "#OAR -t besteffort" in cluster.job_header
-        assert '#OAR -p "memcore>=3337"' in cluster.job_header
 
     with OARCluster(cores=4, memory="8GB") as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "walltime=" in cluster.job_header
-        assert '#OAR -p "memcore>=1907"' in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
 
     with OARCluster(
+        walltime="00:02:00",
+        processes=4,
+        cores=8,
+        memory="28GB",
+        mem_core_syntax="memcore",
+    ) as cluster:
+        assert "#OAR -n dask-worker" in cluster.job_header
+        assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
+        assert "#OAR -p memcore>=3337" in cluster.job_header
+
+    with OARCluster(
         cores=4,
-        memory="8GB",
+        memory="28MB",
         job_extra_directives=["-p gpu_count=1"],
+        mem_core_syntax="mem_core",
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "walltime=" in cluster.job_header
-        assert '#OAR -p "memcore>=1907 AND gpu_count=1"' in cluster.job_header
+        assert '#OAR -p "gpu_count=1 AND mem_core>=6"' in cluster.job_header
 
 
 def test_job_script():
@@ -64,9 +67,9 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
-        assert '#OAR -p "memcore>=3337"' in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
+        assert "#OAR -p mem" not in job_script
 
         assert "export " not in job_script
 
@@ -84,6 +87,7 @@ def test_job_script():
         processes=4,
         cores=8,
         memory="28GB",
+        mem_core_syntax="memcore",
         job_script_prologue=[
             'export LANG="en_US.utf8"',
             'export LANGUAGE="en_US.utf8"',
@@ -96,7 +100,7 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
-        assert '#OAR -p "memcore>=3337"' in job_script
+        assert "#OAR -p memcore>=3337" in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
 
@@ -139,6 +143,7 @@ def test_config_name_oar_takes_custom_config():
         "job-cpu": None,
         "job-mem": None,
         "resource-spec": None,
+        "mem-core-syntax": None,
     }
 
     with dask.config.set({"jobqueue.oar-config-name": conf}):
