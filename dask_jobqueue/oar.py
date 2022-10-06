@@ -27,7 +27,7 @@ class OARJob(Job):
         project=None,
         resource_spec=None,
         walltime=None,
-        mem_core_syntax=None,
+        oar_mem_core_property_name=None,
         config_name=None,
         **base_class_kwargs
     ):
@@ -83,39 +83,42 @@ class OARJob(Job):
         # Memory
         memory = self.worker_memory
         if memory is not None:
-            if mem_core_syntax is None:
-                mem_core_syntax = dask.config.get(
-                    "jobqueue.%s.mem-core-syntax" % self.config_name
+            if oar_mem_core_property_name is None:
+                oar_mem_core_property_name = dask.config.get(
+                    "jobqueue.%s.oar-mem-core-property-name" % self.config_name
                 )
-            if mem_core_syntax is None:
+            if oar_mem_core_property_name is None:
                 warn = (
-                    "Please specify the memory per core parameter syntax of your cluster, e.g., memcore, mem_core.. "
-                    "Otherwise, your memory per core request cannot be taken into account by OAR. "
+                    "The OAR property name corresponding to the memory per core of your cluster has not been set. "
+                    "Thus, the memory parameter will not be used by OAR. "
+                    "It can be set through oar_mem_core_property_name, e.g., memcore, mem_core.. "
                 )
                 warnings.warn(warn, category=UserWarning)
             else:
                 # OAR expects MiB as memory unit
                 oar_memory = int(
-                    (parse_bytes(self.worker_memory / self.worker_cores) / 2**20)
+                    parse_bytes(self.worker_memory / self.worker_cores) / 2**20
                 )
-                header_lines.append("#OAR -p " + mem_core_syntax + ">=%s" % oar_memory)
+                header_lines.append(
+                    "#OAR -p " + oar_mem_core_property_name + ">=%s" % oar_memory
+                )
                 # OAR needs to have the properties on a single line, with SQL syntaxe
                 # If there are several "#OAR -p" lines, only the last one will be taken into account by OAR
-                properties = [
-                    properties
-                    for properties in self.job_extra_directives
-                    if properties.startswith("-p")
+                job_properties = [
+                    directive
+                    for directive in self.job_extra_directives
+                    if directive.startswith("-p")
                 ]
-                if properties:
+                if job_properties:
                     header_lines.append(
                         "#OAR -p "
                         + '"'
-                        + properties.pop()
+                        + job_properties.pop()
                         .replace("-p ", "")
                         .replace("'", "")
                         .replace('"', "")
                         + " AND "
-                        + mem_core_syntax
+                        + oar_mem_core_property_name
                         + ">=%s" % oar_memory
                         + '"'
                     )
@@ -167,7 +170,7 @@ class OARCluster(JobQueueCluster):
         Deprecated: use ``job_extra_directives`` instead. This parameter will be removed in a future version.
     job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
-    mem_core_syntax : str
+    oar_mem_core_property_name : str
         Syntax for memory per core. If None, warning to users.
 
     Examples
