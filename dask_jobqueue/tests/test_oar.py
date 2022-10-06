@@ -134,9 +134,9 @@ def test_config_name_oar_takes_custom_config():
         "death-timeout": None,
         "local-directory": "/foo",
         "shared-temp-directory": None,
-        "extra": [],
+        "extra": None,
         "worker-extra-args": [],
-        "env-extra": [],
+        "env-extra": None,
         "job-script-prologue": [],
         "log-directory": None,
         "shebang": "#!/usr/bin/env bash",
@@ -149,4 +149,3 @@ def test_config_name_oar_takes_custom_config():
     with dask.config.set({"jobqueue.oar-config-name": conf}):
         with OARCluster(config_name="oar-config-name") as cluster:
             assert cluster.job_name == "myname"
-

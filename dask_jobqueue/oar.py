@@ -29,7 +29,7 @@ class OARJob(Job):
         walltime=None,
         mem_core_syntax=None,
         config_name=None,
-        **base_class_kwargs,
+        **base_class_kwargs
     ):
         super().__init__(
             scheduler=scheduler, name=name, config_name=config_name, **base_class_kwargs
@@ -45,8 +45,6 @@ class OARJob(Job):
             )
         if walltime is None:
             walltime = dask.config.get("jobqueue.%s.walltime" % self.config_name)
-        if job_extra is None:
-            job_extra = dask.config.get("jobqueue.%s.job-extra" % self.config_name)
 
         header_lines = []
         if self.job_name is not None:
@@ -148,7 +146,6 @@ class OARJob(Job):
         oarsub_command = " ".join([self.submit_command] + oarsub_options)
         oarsub_command_split = shlex.split(oarsub_command) + [inline_script]
         return self._call(oarsub_command_split)
-
 
 
 class OARCluster(JobQueueCluster):
