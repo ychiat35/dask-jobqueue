@@ -1,8 +1,7 @@
 import logging
 import shlex
-import subprocess
+import warnings
 
-from more_itertools import intersperse
 from dask.utils import parse_bytes
 
 import dask
@@ -28,7 +27,7 @@ class OARJob(Job):
         project=None,
         resource_spec=None,
         walltime=None,
-        job_extra=None,
+        mem_core_syntax=None,
         config_name=None,
         **base_class_kwargs,
     ):
@@ -57,22 +56,6 @@ class OARJob(Job):
         if project is not None:
             header_lines.append("#OAR --project %s" % project)
 
-        # Memory
-        memory = self.worker_memory
-        if memory is not None:
-            oarnodes_output = subprocess.check_output("oarnodes")
-            oar_memory = int(
-                float(
-                    format_bytes_oar(
-                        parse_bytes(self.worker_memory / self.worker_cores)
-                    )
-                )
-            )
-            if "memcore" in str(oarnodes_output):
-                header_lines.append("#OAR -p memcore>=%s" % oar_memory)
-            elif "mem_core" in str(oarnodes_output):
-                header_lines.append("#OAR -p mem_core>=%s" % oar_memory)
-
         # OAR needs to have the resource on a single line otherwise it is
         # considered as a "moldable job" (i.e. the scheduler can chose between
         # multiple sets of resources constraints)
@@ -99,19 +82,45 @@ class OARJob(Job):
         # Add extra header directives
         header_lines.extend(["#OAR %s" % arg for arg in self.job_extra_directives])
 
-        # OAR needs to have the properties on a single line, with SQL syntaxe
-        oar_properties = [
-            header.replace("#OAR -p ", "")
-            for header in header_lines
-            if header.startswith("#OAR -p")
-        ]
-        oar_properties = list(intersperse(" AND ", oar_properties))
-        header_lines = [
-            header for header in header_lines if not header.startswith("#OAR -p")
-        ]
-        header_lines.append(
-            "#OAR -p %s" % '"' + ("".join("".join(i) for i in [oar_properties])) + '"'
-        )
+        # Memory
+        memory = self.worker_memory
+        if memory is not None:
+            if mem_core_syntax is None:
+                mem_core_syntax = dask.config.get(
+                    "jobqueue.%s.mem-core-syntax" % self.config_name
+                )
+            if mem_core_syntax is None:
+                warn = (
+                    "Please specify the memory per core parameter syntax of your cluster, e.g., memcore, mem_core.. "
+                    "Otherwise, your memory per core request cannot be taken into account by OAR. "
+                )
+                warnings.warn(warn, category=UserWarning)
+            else:
+                # OAR expects MiB as memory unit
+                oar_memory = int(
+                    (parse_bytes(self.worker_memory / self.worker_cores) / 2**20)
+                )
+                header_lines.append("#OAR -p " + mem_core_syntax + ">=%s" % oar_memory)
+                # OAR needs to have the properties on a single line, with SQL syntaxe
+                # If there are several "#OAR -p" lines, only the last one will be taken into account by OAR
+                properties = [
+                    properties
+                    for properties in self.job_extra_directives
+                    if properties.startswith("-p")
+                ]
+                if properties:
+                    header_lines.append(
+                        "#OAR -p "
+                        + '"'
+                        + properties.pop()
+                        .replace("-p ", "")
+                        .replace("'", "")
+                        .replace('"', "")
+                        + " AND "
+                        + mem_core_syntax
+                        + ">=%s" % oar_memory
+                        + '"'
+                    )
 
         self.job_header = "\n".join(header_lines)
 
@@ -141,21 +150,6 @@ class OARJob(Job):
         return self._call(oarsub_command_split)
 
 
-def format_bytes_oar(n: int) -> float:
-    """Format bytes as Dask: for all values < 2**60, the output is always <= 10 characters.
-    OAR expects MiB as memory unit.
-    """
-    for prefix, k in (
-        ("Pi", 2**50),
-        ("Ti", 2**40),
-        ("Gi", 2**30),
-        ("Mi", 2**20),
-        ("ki", 2**10),
-    ):
-        if n >= k * 0.9:
-            return f"{(n * (k / 2**20))/ k:.2f}"
-    return f"{n / 2**20}"
-
 
 class OARCluster(JobQueueCluster):
     __doc__ = """ Launch Dask on an OAR cluster
@@ -165,7 +159,7 @@ class OARCluster(JobQueueCluster):
     queue : str
         Destination queue for each worker job. Passed to `#OAR -q` option.
     project : str
-        Project associated with each worker job. Passed to `#OAR -p` option.
+        Project associated with each worker job. Passed to `#OAR --project` option.
     {job}
     {cluster}
     resource_spec : str
@@ -173,7 +167,11 @@ class OARCluster(JobQueueCluster):
     walltime : str
         Walltime for each worker job.
     job_extra : list
+        Deprecated: use ``job_extra_directives`` instead. This parameter will be removed in a future version.
+    job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
+    mem_core_syntax : str
+        Syntax for memory per core. If None, warning to users.
 
     Examples
     --------
