@@ -1,5 +1,8 @@
 import logging
 import shlex
+import warnings
+
+from dask.utils import parse_bytes
 
 import dask
 
@@ -24,6 +27,7 @@ class OARJob(Job):
         project=None,
         resource_spec=None,
         walltime=None,
+        mem_core_syntax=None,
         config_name=None,
         **base_class_kwargs
     ):
@@ -76,6 +80,46 @@ class OARJob(Job):
         # Add extra header directives
         header_lines.extend(["#OAR %s" % arg for arg in self.job_extra_directives])
 
+        # Memory
+        memory = self.worker_memory
+        if memory is not None:
+            if mem_core_syntax is None:
+                mem_core_syntax = dask.config.get(
+                    "jobqueue.%s.mem-core-syntax" % self.config_name
+                )
+            if mem_core_syntax is None:
+                warn = (
+                    "Please specify the memory per core parameter syntax of your cluster, e.g., memcore, mem_core.. "
+                    "Otherwise, your memory per core request cannot be taken into account by OAR. "
+                )
+                warnings.warn(warn, category=UserWarning)
+            else:
+                # OAR expects MiB as memory unit
+                oar_memory = int(
+                    (parse_bytes(self.worker_memory / self.worker_cores) / 2**20)
+                )
+                header_lines.append("#OAR -p " + mem_core_syntax + ">=%s" % oar_memory)
+                # OAR needs to have the properties on a single line, with SQL syntaxe
+                # If there are several "#OAR -p" lines, only the last one will be taken into account by OAR
+                properties = [
+                    properties
+                    for properties in self.job_extra_directives
+                    if properties.startswith("-p")
+                ]
+                if properties:
+                    header_lines.append(
+                        "#OAR -p "
+                        + '"'
+                        + properties.pop()
+                        .replace("-p ", "")
+                        .replace("'", "")
+                        .replace('"', "")
+                        + " AND "
+                        + mem_core_syntax
+                        + ">=%s" % oar_memory
+                        + '"'
+                    )
+
         self.job_header = "\n".join(header_lines)
 
         logger.debug("Job script: \n %s" % self.job_script())
@@ -123,6 +167,8 @@ class OARCluster(JobQueueCluster):
         Deprecated: use ``job_extra_directives`` instead. This parameter will be removed in a future version.
     job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
+    mem_core_syntax : str
+        Syntax for memory per core. If None, warning to users.
 
     Examples
     --------
