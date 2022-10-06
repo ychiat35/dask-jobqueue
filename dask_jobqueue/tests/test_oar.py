@@ -14,7 +14,7 @@ def test_header():
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
-        assert "#OAR -p mem" not in cluster.job_header
+        assert "#OAR -p" not in cluster.job_header
 
     with OARCluster(
         queue="regular",
@@ -40,17 +40,27 @@ def test_header():
         processes=4,
         cores=8,
         memory="28GB",
-        mem_core_syntax="memcore",
+        oar_mem_core_property_name="memcore",
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
         assert "#OAR -p memcore>=3337" in cluster.job_header
 
     with OARCluster(
+        cores=8,
+        memory="28GB",
+        job_extra_directives=["-p cluster='yeti'"],
+        oar_mem_core_property_name="mem_core",
+    ) as cluster:
+        assert "#OAR -n dask-worker" in cluster.job_header
+        assert "#OAR -l /nodes=1/core=8" in cluster.job_header
+        assert '#OAR -p "cluster=yeti AND mem_core>=3337"' in cluster.job_header
+
+    with OARCluster(
         cores=4,
         memory="28MB",
         job_extra_directives=["-p gpu_count=1"],
-        mem_core_syntax="mem_core",
+        oar_mem_core_property_name="mem_core",
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "walltime=" in cluster.job_header
@@ -87,7 +97,7 @@ def test_job_script():
         processes=4,
         cores=8,
         memory="28GB",
-        mem_core_syntax="memcore",
+        oar_mem_core_property_name="memcore",
         job_script_prologue=[
             'export LANG="en_US.utf8"',
             'export LANGUAGE="en_US.utf8"',
@@ -143,7 +153,7 @@ def test_config_name_oar_takes_custom_config():
         "job-cpu": None,
         "job-mem": None,
         "resource-spec": None,
-        "mem-core-syntax": None,
+        "oar-mem-core-property-name": None,
     }
 
     with dask.config.set({"jobqueue.oar-config-name": conf}):
