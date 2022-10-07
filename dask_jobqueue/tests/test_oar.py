@@ -79,7 +79,7 @@ def test_job_script():
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
-        assert "#OAR -p mem" not in job_script
+        assert "#OAR -p" not in job_script
 
         assert "export " not in job_script
 

@@ -164,7 +164,7 @@ class OARCluster(JobQueueCluster):
     job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
     oar_mem_core_property_name : str
-        Syntax for memory per core. If None, warning to users.
+        The memory per core property name of your OAR cluster, e.g., memcore, mem_core.. If None, warning to users.
 
     Examples
     --------
