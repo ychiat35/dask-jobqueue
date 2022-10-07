@@ -1,5 +1,8 @@
 import logging
 import shlex
+import warnings
+
+from dask.utils import parse_bytes
 
 import dask
 
@@ -24,6 +27,7 @@ class OARJob(Job):
         project=None,
         resource_spec=None,
         walltime=None,
+        oar_mem_core_property_name=None,
         config_name=None,
         **base_class_kwargs
     ):
@@ -76,6 +80,42 @@ class OARJob(Job):
         # Add extra header directives
         header_lines.extend(["#OAR %s" % arg for arg in self.job_extra_directives])
 
+        # Memory
+        memory = self.worker_memory
+        if memory is not None:
+            if oar_mem_core_property_name is None:
+                oar_mem_core_property_name = dask.config.get(
+                    "jobqueue.%s.oar-mem-core-property-name" % self.config_name
+                )
+            if oar_mem_core_property_name is None:
+                warn = (
+                    "The OAR property name corresponding to the memory per core of your cluster has not been set. "
+                    "Thus, the memory parameter will not be used by OAR. "
+                    "It can be set through oar_mem_core_property_name, e.g., memcore, mem_core.. "
+                )
+                warnings.warn(warn, category=UserWarning)
+            else:
+                # OAR expects MiB as memory unit
+                oar_memory = int(
+                    parse_bytes(self.worker_memory / self.worker_cores) / 2**20
+                )
+                header_lines.append(
+                    "#OAR -p " + oar_mem_core_property_name + ">=%s" % oar_memory
+                )
+                # OAR needs to have the properties on a single line, with SQL syntaxe
+                # If there are several "#OAR -p" lines, only the last one will be taken into account by OAR
+                last_job_property = return_last_job_property(self.job_extra_directives)
+                if last_job_property is not None:
+                    header_lines.append(
+                        "#OAR -p "
+                        + '"'
+                        + last_job_property
+                        + " AND "
+                        + oar_mem_core_property_name
+                        + ">=%s" % oar_memory
+                        + '"'
+                    )
+
         self.job_header = "\n".join(header_lines)
 
         logger.debug("Job script: \n %s" % self.job_script())
@@ -123,6 +163,8 @@ class OARCluster(JobQueueCluster):
         Deprecated: use ``job_extra_directives`` instead. This parameter will be removed in a future version.
     job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
+    oar_mem_core_property_name : str
+        The memory per core property name of your OAR cluster, e.g., memcore, mem_core.. If None, warning to users.
 
     Examples
     --------
@@ -140,3 +182,13 @@ class OARCluster(JobQueueCluster):
         job=job_parameters, cluster=cluster_parameters
     )
     job_cls = OARJob
+
+
+def return_last_job_property(job_extra_directives):
+    job_properties = [
+        directive for directive in job_extra_directives if directive.startswith("-p")
+    ]
+    if job_properties:
+        return job_properties[-1].replace("-p ", "")
+    else:
+        return None
