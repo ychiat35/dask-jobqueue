@@ -54,7 +54,7 @@ def test_header():
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8" in cluster.job_header
-        assert '#OAR -p "cluster=yeti AND mem_core>=3337"' in cluster.job_header
+        assert "#OAR -p \"cluster='yeti' AND mem_core>=3337\"" in cluster.job_header
 
     with OARCluster(
         cores=4,
