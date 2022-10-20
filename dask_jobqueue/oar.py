@@ -164,7 +164,10 @@ class OARCluster(JobQueueCluster):
     job_extra_directives : list
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
     oar_mem_core_property_name : str
-        The memory per core property name of your OAR cluster, e.g., memcore, mem_core.. If None, warning to users.
+        The memory per core property name of your OAR cluster (usually named `memcore` or `mem_core`).
+        Existing properties can be listed by `oarnodes` command.
+        Note that the memory per core property might not exist on your cluster.
+        If it is None, you will be warned that the memory parameter will not be taken into account by OAR.
 
     Examples
     --------
