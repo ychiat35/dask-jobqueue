@@ -188,6 +188,9 @@ def test_oar_mem_core_property_name_none_warning():
             "The OAR property name corresponding to the memory per core of your cluster has not been set"
             in str(w[0].message)
         )
+        job_script = job.job_script()
+        assert "#OAR -p" not in job_script
+
     with warnings.catch_warnings(record=True) as w:
         # should not give a warning
         job = job_cls(
@@ -196,3 +199,5 @@ def test_oar_mem_core_property_name_none_warning():
             oar_mem_core_property_name="memcore",
         )
         assert len(w) == 0
+        job_script = job.job_script()
+        assert "#OAR -p memcore" in job_script
