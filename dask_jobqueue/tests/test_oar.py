@@ -8,34 +8,6 @@ from dask_jobqueue import OARCluster
 
 def test_header():
     with OARCluster(
-        walltime="00:02:00", processes=4, cores=8, memory="28GB"
-    ) as cluster:
-        assert "#OAR -n dask-worker" in cluster.job_header
-        assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
-        assert "#OAR --project" not in cluster.job_header
-        assert "#OAR -q" not in cluster.job_header
-        assert "#OAR -p" not in cluster.job_header
-
-    with OARCluster(
-        queue="regular",
-        project="DaskOnOar",
-        processes=4,
-        cores=8,
-        memory="28GB",
-        job_extra_directives=["-t besteffort"],
-    ) as cluster:
-        assert "walltime=" in cluster.job_header
-        assert "#OAR --project DaskOnOar" in cluster.job_header
-        assert "#OAR -q regular" in cluster.job_header
-        assert "#OAR -t besteffort" in cluster.job_header
-
-    with OARCluster(cores=4, memory="8GB") as cluster:
-        assert "#OAR -n dask-worker" in cluster.job_header
-        assert "walltime=" in cluster.job_header
-        assert "#OAR --project" not in cluster.job_header
-        assert "#OAR -q" not in cluster.job_header
-
-    with OARCluster(
         walltime="00:02:00",
         processes=4,
         cores=8,
@@ -45,16 +17,53 @@ def test_header():
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
         assert "#OAR -p memcore>=3337" in cluster.job_header
+        assert "#OAR --project" not in cluster.job_header
+        assert "#OAR -q" not in cluster.job_header
+
+    with OARCluster(
+        queue="regular",
+        project="DaskOnOar",
+        processes=4,
+        cores=8,
+        memory="28GB",
+        oar_mem_core_property_name="mem_core",
+        job_extra_directives=["-t besteffort"],
+    ) as cluster:
+        assert "walltime=" in cluster.job_header
+        assert "#OAR --project DaskOnOar" in cluster.job_header
+        assert "#OAR -q regular" in cluster.job_header
+        assert "#OAR -t besteffort" in cluster.job_header
+        assert "#OAR -p mem_core>=3337" in cluster.job_header
+
+    with OARCluster(
+        cores=4, memory="8GB", oar_mem_core_property_name="memcore"
+    ) as cluster:
+        assert "#OAR -n dask-worker" in cluster.job_header
+        assert "walltime=" in cluster.job_header
+        assert "#OAR -p memcore" in cluster.job_header
+        assert "#OAR --project" not in cluster.job_header
+        assert "#OAR -q" not in cluster.job_header
+
+    with OARCluster(
+        walltime="00:02:00",
+        processes=4,
+        cores=8,
+        memory="28GB",
+        oar_mem_core_property_name="mem_core",
+    ) as cluster:
+        assert "#OAR -n dask-worker" in cluster.job_header
+        assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
+        assert "#OAR -p mem_core>=3337" in cluster.job_header
 
     with OARCluster(
         cores=8,
         memory="28GB",
         job_extra_directives=["-p cluster='yeti'"],
-        oar_mem_core_property_name="mem_core",
+        oar_mem_core_property_name="memcore",
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8" in cluster.job_header
-        assert "#OAR -p \"cluster='yeti' AND mem_core>=3337\"" in cluster.job_header
+        assert "#OAR -p \"cluster='yeti' AND memcore>=3337\"" in cluster.job_header
 
     with OARCluster(
         cores=4,
@@ -69,7 +78,11 @@ def test_header():
 
 def test_job_script():
     with OARCluster(
-        walltime="00:02:00", processes=4, cores=8, memory="28GB"
+        walltime="00:02:00",
+        processes=4,
+        cores=8,
+        memory="28GB",
+        oar_mem_core_property_name="memcore",
     ) as cluster:
         job_script = cluster.job_script()
         assert "#OAR" in job_script
@@ -77,12 +90,10 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
+        assert "#OAR -p memcore>=3337" in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
-        assert "#OAR -p" not in job_script
-
         assert "export " not in job_script
-
         assert (
             "{} -m distributed.cli.dask_worker tcp://".format(sys.executable)
             in job_script
@@ -97,7 +108,7 @@ def test_job_script():
         processes=4,
         cores=8,
         memory="28GB",
-        oar_mem_core_property_name="memcore",
+        oar_mem_core_property_name="mem_core",
         job_script_prologue=[
             'export LANG="en_US.utf8"',
             'export LANGUAGE="en_US.utf8"',
@@ -110,7 +121,7 @@ def test_job_script():
         formatted_bytes = format_bytes(parse_bytes("7GB")).replace(" ", "")
         assert f"--memory-limit {formatted_bytes}" in job_script
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in job_script
-        assert "#OAR -p memcore>=3337" in job_script
+        assert "#OAR -p mem_core>=3337" in job_script
         assert "#OAR --project" not in job_script
         assert "#OAR -q" not in job_script
 
@@ -153,9 +164,35 @@ def test_config_name_oar_takes_custom_config():
         "job-cpu": None,
         "job-mem": None,
         "resource-spec": None,
-        "oar-mem-core-property-name": None,
+        "oar-mem-core-property-name": "memcore",
     }
 
     with dask.config.set({"jobqueue.oar-config-name": conf}):
         with OARCluster(config_name="oar-config-name") as cluster:
             assert cluster.job_name == "myname"
+
+
+def test_oar_mem_core_property_name_none_warning():
+    import warnings
+
+    # test issuing of warning
+    warnings.simplefilter("always")
+
+    job_cls = OARCluster.job_cls
+    with warnings.catch_warnings(record=True) as w:
+        # should give a warning
+        job = job_cls(cores=1, memory="1 GB")
+        assert len(w) == 1
+        assert issubclass(w[0].category, UserWarning)
+        assert (
+            "The OAR property name corresponding to the memory per core of your cluster has not been set"
+            in str(w[0].message)
+        )
+    with warnings.catch_warnings(record=True) as w:
+        # should not give a warning
+        job = job_cls(
+            cores=1,
+            memory="1 GB",
+            oar_mem_core_property_name="memcore",
+        )
+        assert len(w) == 0
