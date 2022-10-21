@@ -147,30 +147,47 @@ def test_deprecation_header_skip(Cluster):
 
     job_cls = Cluster.job_cls
     with warnings.catch_warnings(record=True) as w:
-        # should give a warning
         job = job_cls(cores=1, memory="1 GB", header_skip=["old_param"])
-        assert len(w) == 1
+        # should give a FutureWarning about the deprecation of header_skip
         assert issubclass(w[0].category, FutureWarning)
         assert "header_skip has been renamed" in str(w[0].message)
+        if not isinstance(Cluster, "OARCluster"):
+            assert len(w) == 1
+        else:
+            # For OAR instance, should give a UserWarning when memcore property name is none
+            assert len(w) == 2
+            assert issubclass(w[1].category, UserWarning)
+            assert "the memory per core of your cluster has not been set" in str(
+                w[1].message
+            )
     with warnings.catch_warnings(record=True) as w:
-        # should give a warning
         job = job_cls(
             cores=1,
             memory="1 GB",
             header_skip=["old_param"],
             job_directives_skip=["new_param"],
         )
-        assert len(w) == 1
+        # should give a FutureWarning about the deprecation of header_skip
         assert issubclass(w[0].category, FutureWarning)
         assert "header_skip has been renamed" in str(w[0].message)
+        if not isinstance(Cluster, "OARCluster"):
+            assert len(w) == 1
+        else:
+            # For OAR instance, should give a UserWarning when memcore property name is none
+            assert len(w) == 2
+            assert issubclass(w[1].category, UserWarning)
+            assert "the memory per core of your cluster has not been set" in str(
+                w[1].message
+            )
     with warnings.catch_warnings(record=True) as w:
-        # should not give a warning
+        # should not give a FutureWarning
         job = job_cls(
             cores=1,
             memory="1 GB",
             job_directives_skip=["new_param"],
         )
-        assert len(w) == 0
+        if not isinstance(Cluster, "OARCluster"):
+            assert len(w) == 0
 
     # the rest is not about the warning but about behaviour: if job_directives_skip is not
     # set, header_skip should still be used if provided
@@ -240,8 +257,9 @@ def test_docstring_cluster(Cluster):
 def test_deprecation_env_extra(Cluster):
     import warnings
 
-    # test issuing of warning
-    warnings.simplefilter("always")
+    # test issuing of warning but ignore UserWarning
+    # for details about UserWarning of OARCluster, please see test_deprecation_header_skip()
+    warnings.simplefilter("ignore", UserWarning)
 
     job_cls = Cluster.job_cls
     with warnings.catch_warnings(record=True) as w:
@@ -304,8 +322,9 @@ def test_deprecation_env_extra(Cluster):
 def test_deprecation_extra(Cluster):
     import warnings
 
-    # test issuing of warning
-    warnings.simplefilter("always")
+    # test issuing of warning but ignore UserWarning
+    # for details about UserWarning of OARCluster, please see test_deprecation_header_skip()
+    warnings.simplefilter("ignore", UserWarning)
 
     job_cls = Cluster.job_cls
     with warnings.catch_warnings(record=True) as w:
@@ -371,8 +390,9 @@ def test_deprecation_job_extra(Cluster):
 
     import warnings
 
-    # test issuing of warning
-    warnings.simplefilter("always")
+    # test issuing of warning but ignore UserWarning
+    # for details about UserWarning of OARCluster, please see test_deprecation_header_skip()
+    warnings.simplefilter("ignore", UserWarning)
 
     job_cls = Cluster.job_cls
     with warnings.catch_warnings(record=True) as w:
