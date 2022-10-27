@@ -12,11 +12,9 @@ def test_header():
         processes=4,
         cores=8,
         memory="28GB",
-        oar_mem_core_property_name="memcore",
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
-        assert "#OAR -p memcore>=3337" in cluster.job_header
         assert "#OAR --project" not in cluster.job_header
         assert "#OAR -q" not in cluster.job_header
 
@@ -26,14 +24,12 @@ def test_header():
         processes=4,
         cores=8,
         memory="28GB",
-        oar_mem_core_property_name="mem_core",
         job_extra_directives=["-t besteffort"],
     ) as cluster:
         assert "walltime=" in cluster.job_header
         assert "#OAR --project DaskOnOar" in cluster.job_header
         assert "#OAR -q regular" in cluster.job_header
         assert "#OAR -t besteffort" in cluster.job_header
-        assert "#OAR -p mem_core>=3337" in cluster.job_header
 
     with OARCluster(
         cores=4, memory="8GB", oar_mem_core_property_name="memcore"
@@ -54,16 +50,6 @@ def test_header():
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
         assert "#OAR -p mem_core>=3337" in cluster.job_header
-
-    with OARCluster(
-        cores=8,
-        memory="28GB",
-        job_extra_directives=["-p cluster='yeti'"],
-        oar_mem_core_property_name="memcore",
-    ) as cluster:
-        assert "#OAR -n dask-worker" in cluster.job_header
-        assert "#OAR -l /nodes=1/core=8" in cluster.job_header
-        assert "#OAR -p \"cluster='yeti' AND memcore>=3337\"" in cluster.job_header
 
     with OARCluster(
         cores=4,
@@ -185,7 +171,7 @@ def test_oar_mem_core_property_name_none_warning():
         assert len(w) == 1
         assert issubclass(w[0].category, UserWarning)
         assert (
-            "The OAR property name corresponding to the memory per core of your cluster has not been set"
+            "oar_mem_core_property_name is not set"
             in str(w[0].message)
         )
         job_script = job.job_script()

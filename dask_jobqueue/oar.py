@@ -88,19 +88,12 @@ class OARJob(Job):
                     "jobqueue.%s.oar-mem-core-property-name" % self.config_name
                 )
             if oar_mem_core_property_name is None:
-                warn = (
-                    "The OAR property name corresponding to the memory per core of your cluster has not been set. "
-                    "Thus, the memory parameter will not be used by OAR. "
-                    "It can be set through oar_mem_core_property_name, e.g., memcore, mem_core.. "
-                )
+                warn = "oar_mem_core_property_name is not set. Thus OAR will not take the memory parameter into account"
                 warnings.warn(warn, category=UserWarning)
             else:
                 # OAR expects MiB as memory unit
                 oar_memory = int(
                     parse_bytes(self.worker_memory / self.worker_cores) / 2**20
-                )
-                header_lines.append(
-                    "#OAR -p " + oar_mem_core_property_name + ">=%s" % oar_memory
                 )
                 # OAR needs to have the properties on a single line, with SQL syntaxe
                 # If there are several "#OAR -p" lines, only the last one will be taken into account by OAR
@@ -114,6 +107,10 @@ class OARJob(Job):
                         + oar_mem_core_property_name
                         + ">=%s" % oar_memory
                         + '"'
+                    )
+                else:
+                    header_lines.append(
+                        "#OAR -p " + oar_mem_core_property_name + ">=%s" % oar_memory
                     )
 
         self.job_header = "\n".join(header_lines)
@@ -165,9 +162,10 @@ class OARCluster(JobQueueCluster):
         List of other OAR options, for example `-t besteffort`. Each option will be prepended with the #OAR prefix.
     oar_mem_core_property_name : str
         The memory per core property name of your OAR cluster (usually named `memcore` or `mem_core`).
-        Existing properties can be listed by `oarnodes` command.
+        Existing properties can be listed by executing `oarnodes` command.
         Note that the memory per core property might not exist on your cluster.
-        If it is None, you will be warned that the memory parameter will not be taken into account by OAR.
+        In this case, do not specify a value for oar_mem_core_property_name parameter.
+        If this parameter is None, you will be warned that the memory parameter will not be taken into account by OAR.
 
     Examples
     --------
@@ -188,10 +186,7 @@ class OARCluster(JobQueueCluster):
 
 
 def return_last_job_property(job_extra_directives):
-    job_properties = [
-        directive for directive in job_extra_directives if directive.startswith("-p")
-    ]
-    if job_properties:
-        return job_properties[-1].replace("-p ", "")
-    else:
-        return None
+    for directive in reversed(job_extra_directives):
+        if directive.startswith("-p"):
+            return directive.replace("-p ", "")
+    return None
