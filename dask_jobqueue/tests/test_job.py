@@ -204,6 +204,7 @@ def test_deprecation_header_skip(Cluster):
     job_script = job.job_script()
     assert "jobname" not in job_script
 
+
 @pytest.mark.asyncio
 async def test_nworkers_scale():
     async with LocalCluster(

@@ -8,10 +8,7 @@ from dask_jobqueue import OARCluster
 
 def test_header():
     with OARCluster(
-        walltime="00:02:00",
-        processes=4,
-        cores=8,
-        memory="28GB",
+        walltime="00:02:00", processes=4, cores=8, memory="28GB"
     ) as cluster:
         assert "#OAR -n dask-worker" in cluster.job_header
         assert "#OAR -l /nodes=1/core=8,walltime=00:02:00" in cluster.job_header
